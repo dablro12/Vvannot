@@ -1,8 +1,9 @@
+import sys, os 
+sys.path.append('../')
+
 import streamlit as st
 from streamlit_drawable_canvas import st_canvas
-import cv2
-from utils.frame_extractor import extract_first_frame
-import numpy as np
+from app.utils.frame_extractor import extract_first_frame
 import json
 from PIL import Image
 import pandas as pd 
@@ -138,3 +139,20 @@ def annot_tool():
             st.error("Failed to extract the first frame.")
     else:
         st.error("No video selected.")
+
+    # 테이블 행 삭제 기능 추가
+    if 'annotations_df' in st.session_state:
+        st.write("### Annotations")
+        annotations_df = st.session_state['annotations_df']
+
+        # 행 선택 기능 (여러 행 선택 가능)
+        selected_rows = st.multiselect("Select rows to delete", annotations_df.index, key='delete_rows')
+
+        # 행 삭제 버튼 클릭 시 선택된 행을 삭제하고 업데이트
+        if selected_rows and st.button("Delete selected rows"):
+            annotations_df = annotations_df.drop(selected_rows).reset_index(drop=True)
+            st.session_state['annotations_df'] = annotations_df  # 업데이트된 데이터프레임을 세션에 저장
+            st.write("Rows deleted successfully.")  # 삭제 완료 메시지
+
+        # 업데이트된 데이터프레임을 출력
+        st.write(annotations_df)
