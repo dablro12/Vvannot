@@ -1,16 +1,13 @@
 import sys, os 
 sys.path.append('../')
 
-import time 
 import streamlit as st
 from streamlit_drawable_canvas import st_canvas
-from app.utils.frame_extractor import extract_first_frame, extract_position 
+from app.utils.frame_extractor import extract_first_frame
 import json
-from PIL import Image, ImageOps
-
+from PIL import Image
 import pandas as pd 
 import os 
-from model.tracker import ObjectTracker
 
 def load_annotations(video_name):
     try:
@@ -29,33 +26,9 @@ def update_dataframe(annot_json):
     
     return all_df
 
-def crop_img_viewer(canvas_result, bg_image):
-    if canvas_result.json_data is None:
-        st.error("No annotations found.")
-        return
-
-    # Crop and display the rectangle annotations
-    for obj in canvas_result.json_data["objects"]:
-        if obj["type"] == "rect":
-            # Adjust coordinates for the original image size
-            left = obj["left"] * 2
-            top = obj["top"] * 2
-            width = obj["width"] * 2
-            height = obj["height"] * 2
-            right = left + width
-            bottom = top + height
-
-            # Ensure the image is in the correct mode
-            if bg_image.mode != "RGB":
-                bg_image = bg_image.convert("RGB")
-
-            cropped_image = bg_image.crop((left, top, right, bottom))
-            st.image(cropped_image, caption=f"Cropped {selected_label['name']}")
-
 selected_label = None 
 canvas_result = None
 annot_json = {}
-
 def annot_tool():
     global annot_json
     global selected_label
@@ -63,18 +36,18 @@ def annot_tool():
     st.title("Annotation Tool")
     
     if 'selected_video' in st.session_state:
-        # 절대경로로 바꾸기 
-        video_path = os.path.abspath(f"uploaded_videos/{st.session_state['selected_video']}")
-        frame, size = extract_first_frame(video_path)
+        video_path = f"uploaded_videos/{st.session_state['selected_video']}"
+        frame = extract_first_frame(video_path)
         
         if frame is not None: # 첫 프레임 추출 성공했을떄 
             st.image(frame, channels="BGR", caption="Original Video 영상")
             
             annotations = load_annotations(st.session_state['selected_video'])
+
             # Sidebar for canvas parameters
             drawing_mode = st.sidebar.selectbox(
                 # "Drawing tool:", ("point", "freedraw", "line", "rect", "circle", "transform")
-                "Drawing tool:", ("rect", "point", "line")
+                "Drawing tool:", ("rect", "point", "line", )
             )
             
             stroke_width = st.sidebar.slider("Stroke width: ", 1, 25, 3)
@@ -98,6 +71,7 @@ def annot_tool():
                 st.sidebar.write(f"{label['name']} - {label['color']}")
                 if st.sidebar.button(f"Delete {label['name']}"):
                     st.session_state['labels'].remove(label)
+
             if not st.session_state['labels']:
                 st.sidebar.error("Please add at least one label before annotating.")
                 return 
@@ -121,98 +95,64 @@ def annot_tool():
                 background_color = bg_color,
                 background_image = bg_image,
                 update_streamlit=realtime_update,
-                height=frame.shape[0]//2,
-                width=frame.shape[1]//2,
+                height=frame.shape[0],
                 drawing_mode=drawing_mode,
                 point_display_radius=point_display_radius if drawing_mode == 'point' else 0,
                 key="anno_tool",
             )
             
-            if canvas_result and canvas_result.json_data is not None and selected_label:
+            if canvas_result.json_data is not None and selected_label:
                 # 중목차 이미지 title
-                objects_df = pd.json_normalize(canvas_result.json_data["objects"]) # object는 dataframe 형태임
+                st.image(canvas_result.image_data, caption="Mask 결과")
+                # 처음에는 컬럼에 빈데이터로 생성
+                # 추가로 label 을 제일 앞으로 추가
+                objects_df = pd.json_normalize(canvas_result.json_data["objects"]) # object는 dataframe 형태임 
                 
                 if not objects_df.empty: # 빈데이터가 아니면
                     # object_df에서 label 이름을 제일 첫번쨰로 해서 annot_json에 할당
                     objects_df.insert(0, 'label', selected_label['name'])
                     objects_df.insert(1, 'label_color', selected_label['color'])
-                    # Crop and display the rectangle annotations
-                    # crop_img_viewer(canvas_result, bg_image)
-            # Process 버튼 생성
-            process_button = st.button("Process")
+                
+                    # row 검사해서 row안에 있는 값이 다른 행과 같은지 보고 같으면 중복이라 판단하고 중복되는 행은 삭제
+                    if selected_label['name'] in annot_json:
+                        annot_json[selected_label['name']] = pd.concat([annot_json[selected_label['name']], objects_df]).drop_duplicates(subset=objects_df.columns.difference(['label', 'label_color']), keep='first').reset_index(drop=True)
+                    else:
+                        annot_json[selected_label['name']] = objects_df # 중복되는 행 삭제후 dict에 저장 
+                # annot_json의 dataframe들을 streamlit에 출력: df의 칼럼은 모두 동일하므로 하나의 데이터프레임으로 모아서 streamlit에 출력 
+                    all_df = update_dataframe(annot_json)   
+                # 데이터프레임을 streamlit에 출력
+                    st.write(all_df)  # st.dataframe(all_df) 대신 st.write(all_df) 사용
+                    canvas_result = None
             
-            if process_button and objects_df.empty != True:
-                # 진행중인 프로세스 상태 보여주기 - ObjectTracker가 처리할때 까지 기다리기 
-                with st.status("Processing..."):
-                    save_path = None
-                    
-                    # save_path 얻어질때까지 하기 
-                    while save_path is None:
-                        first_position = extract_position(objects_df)
-                        save_path = ObjectTracker(
-                            video_path = video_path,
-                            save_path = os.path.abspath(f"app/annotations/{st.session_state['selected_video']}.mp4"),
-                            model_path = os.path.abspath('model/weights/yolov8n.pt'),
-                            cocolabel = os.path.abspath('model/weights/coco128.txt'),
-                            confidence_threshold = 0.5,
-                            first_position = first_position
-                        ).main()
-                
-                if save_path is not None:
-                    # 처리 영상 보여주기
-                    st.video(save_path)        
-                        # 이미지 처리함수 제작 
-                        
-                        
-                
-                # 좌표 추출 
-                
-                
-            
-            
+            # json형식으로 저장 
+            if st.button("Save Annotation"):
+                if not os.path.exists("annotations"):
+                    os.makedirs("annotations")
+                # json 안에 데이터프레임이 있기에 이를 json 형식으로 바꾼 후 저장하기
+                # 데이터프레임을 json 형식으로 바꾸기
+                json_data = {label: json.loads(df.to_json(orient='records')) for label, df in annot_json.items()}
+                # json 형식으로 바꾼 후 저장하기
+                with open(f"annotations/{st.session_state['selected_video']}.json", "w") as f:
+                    json.dump(json_data, f)
+                st.success("Annotation saved!")
         else:
             st.error("Failed to extract the first frame.")
     else:
         st.error("No video selected.")
 
+    # 테이블 행 삭제 기능 추가
+    if 'annotations_df' in st.session_state:
+        st.write("### Annotations")
+        annotations_df = st.session_state['annotations_df']
 
+        # 행 선택 기능 (여러 행 선택 가능)
+        selected_rows = st.multiselect("Select rows to delete", annotations_df.index, key='delete_rows')
 
+        # 행 삭제 버튼 클릭 시 선택된 행을 삭제하고 업데이트
+        if selected_rows and st.button("Delete selected rows"):
+            annotations_df = annotations_df.drop(selected_rows).reset_index(drop=True)
+            st.session_state['annotations_df'] = annotations_df  # 업데이트된 데이터프레임을 세션에 저장
+            st.write("Rows deleted successfully.")  # 삭제 완료 메시지
 
-
-
-            # df_viewer_button = st.button("Data Viewer")
-            # if df_viewer_button:
-            #     if not objects_df.empty:
-            #         # 업데이트된 데이터프레임을 출력
-            #         st.dataframe(objects_df, use_container_width=True)  # st.write 대신 st.dataframe 사용
-                    
-            #         # Save and delete buttons with session state
-            #         if 'save_button' not in st.session_state:
-            #             st.session_state.save_button = False
-            #         if 'deletion_button' not in st.session_state:
-            #             st.session_state.deletion_button = False
-
-            #         save_button = st.button("저장", on_click=lambda: st.session_state.update(save_button=True))
-            #         deletion_button = st.button("삭제", on_click=lambda: st.session_state.update(deletion_button=True))
-            #         # 인덱스로 행을 선택하기 위해 st.multiselect 사용
-            #         selected_indices = st.multiselect("Select rows to delete", objects_df.index, format_func=lambda x: f"Row {x}")
-                    
-            #         if selected_indices and deletion_button:
-            #             objects_df = objects_df.drop(selected_indices).reset_index(drop=True)
-            #             st.session_state['objects_df'] = objects_df  # 업데이트된 데이터프레임을 세션에 저장
-            #             st.write("Rows deleted successfully.")  # 삭제 완료 메시지
-            #             st.session_state.deletion_button = False  # Reset the button state
-                    
-            #         # data를 저장할 수 있는 버튼 만들기
-            #         if st.session_state.save_button:
-            #             if not objects_df.empty:
-            #                 #objects_df에 left, top, width, height 2배로 키우기
-            #                 objects_df['left'] = objects_df['left'] * 2
-            #                 objects_df['top'] = objects_df['top'] * 2
-            #                 objects_df['width'] = objects_df['width'] * 2
-            #                 objects_df['height'] = objects_df['height'] * 2
-            #                 objects_df.to_csv(f"annotations/{st.session_state['selected_video']}.csv", index=False)
-            #                 st.success("Data saved successfully.")
-            #                 st.session_state.save_button = False  # Reset the button state
-            #     else:
-            #         st.error("No annotations found.")
+        # 업데이트된 데이터프레임을 출력
+        st.write(annotations_df)
