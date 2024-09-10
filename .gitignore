@@ -332,7 +332,7 @@ data/insuarance/**
 data/kmle/**
 log/**
 log
-model/**
+model/weights/**
 src/__pycache__/**
 utils/__pycache__/**
 app/__pycache__/**
