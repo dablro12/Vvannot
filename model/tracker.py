@@ -4,7 +4,6 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 from deep_sort_realtime.deepsort_tracker import DeepSort
-from model.utils.sort import Sort
 import csv
 import streamlit as st
 from model.utils.resize import img_cropper
@@ -16,7 +15,7 @@ WHITE = (255, 255, 255)
 class ObjectTracker:
     def __init__(self, video_path: str, save_path: str, model_path: str, cocolabel: str, confidence_threshold: float, first_position: tuple):
         self.CONFIDENCE_THRESHOLD = confidence_threshold
-        self.tracker_type = 'sort'
+        
         self.position_li = []
         self.position_li.append(first_position)
         self.cap, self.out = self.init_video(video_path, save_path)
@@ -24,6 +23,7 @@ class ObjectTracker:
         self.csv_file, self.csv_writer = self.init_save_csv(save_path)
         self.save_path = save_path  # Initialize self.save_path
         self.seg_model = self.init_segmentation(model_name = 'weights/sam2_t.pt')
+        
     def init_video(self, video_path, save_path):
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
@@ -44,17 +44,14 @@ class ObjectTracker:
         out = cv2.VideoWriter(save_path, fourcc, FPS, (WIDTH, HEIGHT))
         print('#### [C] init video')
         return cap, out
-    
     def init_segmentation(self, model_name:str):
         model = SAM(model_name)
         return model
+        
     
     def init_tracker(self, model_path, cocolabel):
         model = YOLO(model_path)
-        if self.tracker_type == 'sort':
-            tracker = Sort()
-        elif self.tracker_type == 'deepsort':
-            tracker = DeepSort(max_age=30, n_init=1)
+        tracker = DeepSort(max_age=30, n_init=1)
         
         if not os.path.exists(cocolabel):
             raise FileNotFoundError(f"Error: The file {cocolabel} does not exist.")
@@ -105,30 +102,8 @@ class ObjectTracker:
             mask = [np.array(m, dtype=np.int32) for m in mask]  # Ensure mask is in the correct format
             cv2.fillPoly(frame, mask, (0, 0, 255))  # Using red color for the mask
         
-    def human_sort_tracker(self, results, frame):
-        tracks = self.tracker.update(np.array([r[0] for r in results]))  # Extract only the bounding boxes
-        for track in tracks:
-            track_id = int(track[4])
-            print(f"track_id : {track_id}")
-            xmin, ymin, xmax, ymax = int(track[0]), int(track[1]), int(track[2]), int(track[3])
-            print(f"xmin, ymin, xmax, ymax : {xmin}, {ymin}, {xmax}, {ymax}")
-            if not self.target_bool:
-                self.target_track_id = track_id
-                self.target_bool = True
-
-            if track_id == self.target_track_id:
-                # sam2 모델로 사람 영역 추출
-                self.human_segmentation(frame, bbox=(xmin, ymin, xmax, ymax))
-                # 사람 표시
-                cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), GREEN, 2)
-                cv2.putText(frame, f'ID: {track_id}', (xmin + 5, ymin - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, WHITE, 2)
-                
-                for result in results:
-                    if np.array_equal(track[:4], result[0]):
-                        confidence = result[1]
-                        self.csv_writer.writerow([self.frame_cnt, track_id, xmin, ymin, xmax, ymax, confidence])
-    
-    def human_deepsort_tracker(self, results, frame, original_frame, crop_position):
+        
+    def human_tracker(self, results, frame, original_frame, crop_position):
         tracks = self.tracker.update_tracks(results, frame=frame)
         
         for track in tracks:
@@ -151,7 +126,7 @@ class ObjectTracker:
                 cv2.putText(frame, f'ID: {track.track_id}', (xmin + 5, ymin - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, WHITE, 2)
                 
                 for result in results:
-                    if np.array_equal(track[:4], result[0]):
+                    if np.array_equal(track.to_ltrb(), result[0]):
                         confidence = result[1]
                         self.csv_writer.writerow([self.frame_cnt, track.track_id, xmin, ymin, xmax, ymax, confidence])
     
@@ -171,10 +146,7 @@ class ObjectTracker:
             results = self.human_detection(self.original_frame)
             if results:  # results가 비어 있지 않은지 확인
                 self.position_li.append(results[-1][0])  # 좌표 업데이트
-            if self.tracker_type == 'sort':
-                self.human_sort_tracker(results, self.original_frame)
-            else:
-                self.human_tracker(results, self.original_frame, self.original_frame, self.position_li[-1])
+            self.human_tracker(results, self.original_frame, self.original_frame, self.position_li[-1])
             
             end = datetime.datetime.now()
             fps = self.video_analysis(start, end)
@@ -197,8 +169,8 @@ class ObjectTracker:
 
 if __name__ == '__main__':
     tracker = ObjectTracker(
-        video_path='/home/eiden/eiden/Vvannot/data/tennis_play.mp4',
-        save_path='/home/eiden/eiden/Vvannot/data/tennis_play_res-sort.mp4',
+        video_path='/home/eiden/eiden/Vvannot/data/demo2-original.mp4',
+        save_path='/home/eiden/eiden/Vvannot/data/demo2-original_res.mp4',
         model_path='/home/eiden/eiden/Vvannot/model/weights/yolov8n.pt',
         cocolabel='/home/eiden/eiden/Vvannot/model/weights/coco128.txt',
         confidence_threshold=0.5,
