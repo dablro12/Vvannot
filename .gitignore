@@ -395,4 +395,6 @@ uploaded_videos/*.mp3
 uploaded_videos/*.wav
 uploaded_videos/*.flac
 
-app/DB/users.db
+app/DB/users.db 
+
+
