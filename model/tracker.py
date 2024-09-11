@@ -9,7 +9,7 @@ import streamlit as st
 from model.utils.resize import img_cropper
 from ultralytics import SAM
 from utils.saver import save2json
-
+import torch 
 GREEN = (0, 255, 0)
 WHITE = (255, 255, 255)
 
@@ -18,16 +18,22 @@ class ObjectTracker:
         self.CONFIDENCE_THRESHOLD = confidence_threshold
         
         self.annot_dict = {
+            'detection' : [],
             'tracking' : [],
             'mask' : []
         }
+        
+        if torch.cuda.is_available():
+            self.device = torch.device('cuda')
+        else:
+            self.device = torch.device('cpu')
         
         self.position_li = []
         self.position_li.append(first_position)
         self.cap, self.out = self.init_video(video_path, save_path)
         self.model, self.tracker, self.coco128_class = self.init_tracker(model_path, cocolabel)
         self.save_path = save_path  # Initialize self.save_path
-        self.seg_model = self.init_segmentation(model_name = 'weights/sam2_t.pt')
+        self.seg_model = self.init_segmentation(model_name = 'weights/sam2_b.pt')
         
     def init_video(self, video_path, save_path):
         cap = cv2.VideoCapture(video_path)
@@ -51,13 +57,15 @@ class ObjectTracker:
         return cap, out
     
     def init_segmentation(self, model_name:str):
-        model = SAM(model_name)
+        model = SAM(model_name).to(self.device)
+        print('#### [C] init segmentation')
         return model
     
     def init_tracker(self, model_path, cocolabel):
-        model = YOLO(model_path)
+        model = YOLO(model_path).to(self.device)
+        print('#### [C] init human detection')
         tracker = DeepSort(max_age=30, n_init=1)
-        
+        print('#### [C] init human tracker')
         if not os.path.exists(cocolabel):
             raise FileNotFoundError(f"Error: The file {cocolabel} does not exist.")
         
@@ -200,13 +208,13 @@ class ObjectTracker:
         print(f"#### [C] Video Save Path : {self.save_path}")
         return self.save_path
 
-# if __name__ == '__main__':
-#     tracker = ObjectTracker(
-#         video_path='/home/eiden/eiden/Vvannot/data/tennis_play.mp4',
-#         save_path='/home/eiden/eiden/Vvannot/data/tennis_play_res.mp4',
-#         model_path='/home/eiden/eiden/Vvannot/model/weights/yolov8n.pt',
-#         cocolabel='/home/eiden/eiden/Vvannot/model/weights/coco128.txt',
-#         confidence_threshold=0.5,
-#         first_position=(322, 100, 552, 478)
-#     )
-#     print(f"save_path : {tracker.main()}")
+if __name__ == '__main__':
+    tracker = ObjectTracker(
+        video_path='/home/eiden/eiden/Vvannot/data/tennis_play.mp4',
+        save_path='/home/eiden/eiden/Vvannot/data/tennis_play_res.mp4',
+        model_path='/home/eiden/eiden/Vvannot/model/weights/yolov8n.pt',
+        cocolabel='/home/eiden/eiden/Vvannot/model/weights/coco128.txt',
+        confidence_threshold=0.5,
+        first_position=(322, 100, 552, 478)
+    )
+    print(f"save_path : {tracker.main()}")

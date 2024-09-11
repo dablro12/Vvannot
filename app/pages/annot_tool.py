@@ -165,9 +165,8 @@ def annot_tool():
                 if os.path.exists(save_path):
                     st.success("Video processed successfully!")
                     # Display processed video
-                    video_file = open(save_path, 'rb').read()
-                    st.video(save_path, format = 'video/{save_path.split(".")[-1]}')  # You can pass the file path directly
-                    
+                    # video_file = open(save_path, 'rb').read()
+                    # st.video(save_path, format = 'video/{save_path.split(".")[-1]}')  # You can pass the file path directly
                     # Create a download button for the processed video
                     with open(save_path, "rb") as video_file:
                         video_bytes = video_file.read()

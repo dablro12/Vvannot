@@ -14,8 +14,6 @@ def main():
 
     if st.session_state['logged_in']:
         st.sidebar.button("Logout", key="sidebar_logout_button", on_click=lambda: st.session_state.update({'logged_in': False, 'page': 'login'}))
-        st.sidebar.button("Hello World", key="sidebar_hello_world_button", on_click=lambda: st.session_state.update({'page': 'hello_world'}))
-        st.sidebar.button("Annotation Tool", key="sidebar_annot_tool_button", on_click=lambda: st.session_state.update({'page': 'annot_tool'}))
         
         if st.session_state.get('page') == 'hello_world':
             hello_world_page()
