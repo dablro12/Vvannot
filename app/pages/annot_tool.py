@@ -55,11 +55,13 @@ def crop_img_viewer(canvas_result, bg_image):
 selected_label = None 
 canvas_result = None
 annot_json = {}
+save_path = None
 
 def annot_tool():
     global annot_json
     global selected_label
     global canvas_result
+    global save_path
     st.title("Annotation Tool")
     
     if 'selected_video' in st.session_state:
@@ -141,78 +143,56 @@ def annot_tool():
             # Process 버튼 생성
             process_button = st.button("Process")
             
-            if process_button and objects_df.empty != True:
+            if process_button and not objects_df.empty:
                 # 진행중인 프로세스 상태 보여주기 - ObjectTracker가 처리할때 까지 기다리기 
-                with st.status("Processing..."):
-                    save_path = None
+                with st.spinner("Processing..."):
                     
                     # save_path 얻어질때까지 하기 
                     while save_path is None:
                         first_position = extract_position(objects_df)
                         save_path = ObjectTracker(
-                            video_path = video_path,
-                            save_path = os.path.abspath(f"app/annotations/{st.session_state['selected_video']}.mp4"),
-                            model_path = os.path.abspath('model/weights/yolov8n.pt'),
-                            cocolabel = os.path.abspath('model/weights/coco128.txt'),
-                            confidence_threshold = 0.5,
-                            first_position = first_position
+                            video_path=video_path,
+                            save_path=os.path.abspath(f"app/annotations/{st.session_state['selected_video']}"),
+                            model_path=os.path.abspath('model/weights/yolov8n.pt'),
+                            cocolabel=os.path.abspath('model/weights/coco128.txt'),
+                            confidence_threshold=0.5,
+                            first_position=first_position
                         ).main()
-                
-                if save_path is not None:
-                    # 처리 영상 보여주기
-                    st.video(save_path)        
-                        # 이미지 처리함수 제작 
+
+            if save_path is not None:
+                print(save_path)
+                # Ensure the video file is valid and exists
+                if os.path.exists(save_path):
+                    st.success("Video processed successfully!")
+                    # Display processed video
+                    video_file = open(save_path, 'rb').read()
+                    st.video(save_path, format = 'video/{save_path.split(".")[-1]}')  # You can pass the file path directly
+                    
+                    # Create a download button for the processed video
+                    with open(save_path, "rb") as video_file:
+                        video_bytes = video_file.read()
+                        st.download_button(
+                            label="Download Processed Video",
+                            data=video_bytes,
+                            file_name=os.path.basename(save_path),
+                            mime=f"video/{save_path.split('.')[-1]}"
+                        )
                         
-                        
+                    # Provide option to download the JSON file
+                    json_path = save_path.replace(save_path.split('.')[-1], 'json')
+                    if os.path.exists(json_path):
+                        with open(json_path, 'rb') as json_file:
+                            json_bytes = json_file.read()
+                            st.download_button(
+                                label='Download Annotation Mask JSON',
+                                data=json_bytes,
+                                file_name=os.path.basename(json_path),
+                            )
+                else:
+                    st.error("The processed video could not be found.")
+
                 
-                # 좌표 추출 
-                
-                
-            
-            
         else:
             st.error("Failed to extract the first frame.")
     else:
         st.error("No video selected.")
-
-
-
-
-
-
-            # df_viewer_button = st.button("Data Viewer")
-            # if df_viewer_button:
-            #     if not objects_df.empty:
-            #         # 업데이트된 데이터프레임을 출력
-            #         st.dataframe(objects_df, use_container_width=True)  # st.write 대신 st.dataframe 사용
-                    
-            #         # Save and delete buttons with session state
-            #         if 'save_button' not in st.session_state:
-            #             st.session_state.save_button = False
-            #         if 'deletion_button' not in st.session_state:
-            #             st.session_state.deletion_button = False
-
-            #         save_button = st.button("저장", on_click=lambda: st.session_state.update(save_button=True))
-            #         deletion_button = st.button("삭제", on_click=lambda: st.session_state.update(deletion_button=True))
-            #         # 인덱스로 행을 선택하기 위해 st.multiselect 사용
-            #         selected_indices = st.multiselect("Select rows to delete", objects_df.index, format_func=lambda x: f"Row {x}")
-                    
-            #         if selected_indices and deletion_button:
-            #             objects_df = objects_df.drop(selected_indices).reset_index(drop=True)
-            #             st.session_state['objects_df'] = objects_df  # 업데이트된 데이터프레임을 세션에 저장
-            #             st.write("Rows deleted successfully.")  # 삭제 완료 메시지
-            #             st.session_state.deletion_button = False  # Reset the button state
-                    
-            #         # data를 저장할 수 있는 버튼 만들기
-            #         if st.session_state.save_button:
-            #             if not objects_df.empty:
-            #                 #objects_df에 left, top, width, height 2배로 키우기
-            #                 objects_df['left'] = objects_df['left'] * 2
-            #                 objects_df['top'] = objects_df['top'] * 2
-            #                 objects_df['width'] = objects_df['width'] * 2
-            #                 objects_df['height'] = objects_df['height'] * 2
-            #                 objects_df.to_csv(f"annotations/{st.session_state['selected_video']}.csv", index=False)
-            #                 st.success("Data saved successfully.")
-            #                 st.session_state.save_button = False  # Reset the button state
-            #     else:
-            #         st.error("No annotations found.")
