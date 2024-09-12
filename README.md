@@ -9,8 +9,13 @@
 ## Result Example
 ![Result](./img/demo_example.gif)
 
-## Installation Requirements
+## Usage Method
+1. Web Platform : Streamlit
+2. Human Detection : Yolov8
+3. Human Tracking : DeepSort
+4. Human Segmentation : SAM2 basemodel
 
+## Installation Requirements
 1. Navigate to the `vvannot` directory:
    ```bash
    cd vvannot
