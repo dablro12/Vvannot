@@ -1,0 +1,11 @@
+streamlit
+streamlit-drawable-canvas
+pandas
+Pillow
+opencv-python
+ultralytics
+deep-sort-realtime
+torch
+filterpy
+simdjson
+

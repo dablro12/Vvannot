@@ -1,5 +1,6 @@
 import json
 import numpy as np
+import os 
 
 def convert_numpy_types(data):
     """
@@ -19,6 +20,11 @@ def convert_numpy_types(data):
         return data  # Return other types as is
 
 def save2json(save_path, save_annot_dict):
+    # directory
+    if not os.path.exists(os.path.dirname(save_path)):
+        os.makedirs(os.path.dirname(save_path))
+    
+    
     save_path = save_path.replace(save_path.split('.')[-1], 'json') 
     
     # Convert any numpy types to native Python types
